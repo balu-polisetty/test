@@ -1,0 +1,197 @@
+import org.apache.spark.sql.SparkSession
+
+
+
+
+
+
+
+// taken from https://github.com/alvinj/ScalaApacheAccessLogParser repo
+
+
+
+case class log (
+
+
+
+   ipAddress: String,               // should be an ip address, but may also be the hostname if hostname-lookups are enabled
+
+
+
+   rfcIdentity: String,             // typically `-`
+
+
+
+   remoteUser: String,              // typically `-`
+
+
+
+   dateTime: String,                // [day/month/year:hour:minute:second zone]
+
+
+
+   request: String,                 // `GET /foo ...`
+
+
+
+   httpStatusCode: String,          // 200, 404, etc.
+
+
+
+   bytesSent: String,               // may be `-`
+
+
+
+   referer: String,                 // where the visitor came from
+
+
+
+   userAgent: String                // long string to represent the browser and OS
+
+
+
+)
+
+
+
+object binDataLogFile {
+
+
+
+  def main(args: Array[String]): Unit = {
+
+
+
+
+
+
+
+    val spark = SparkSession
+
+
+
+      .builder()
+
+
+
+      .appName("Spark Job Using the Spark Context")
+
+
+
+      .master("local[*]")
+
+
+
+      .config("spark.io.compression.codec", "snappy")
+
+
+
+      .getOrCreate()
+
+
+
+
+
+
+
+    val filePath = "bigdatamatica"
+
+
+
+    val logFile = spark.sparkContext.textFile(filePath)
+
+
+
+    // Regex pattern to parse the log
+
+
+
+    val logRegex = """^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})? (\S+) (\S+) (\[.+?\]) "(.*?)" (\d{3}) (\S+) "(.*?)" "(.*?)"""".r
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Parses log and returns case class of the returned values.
+
+
+
+    def parseLog(line: String):log = {
+
+
+
+      val logRegex(ipAddress,rfcIdentity,remoteUser,dateTime,request,httpStatusCode,bytesSent,referer,userAgent) = line;
+
+
+
+      return log(ipAddress,rfcIdentity,remoteUser,dateTime,request,httpStatusCode,bytesSent,referer,userAgent);
+
+
+
+    }
+
+
+
+
+
+
+
+    import spark.implicits._
+
+
+
+
+
+
+
+    // LogFile RDD is filtered if a line doesn't conform to the regex pattern.
+
+
+
+    val logs = logFile.filter(line=>line.matches(logRegex.toString)).map(line=>parseLog(line)).toDF();
+
+
+
+    logs.printSchema()
+
+
+
+    //logs.show(10)
+
+
+
+    logs.registerTempTable("logs"); // Data frame is registered as template.
+
+
+
+
+
+
+
+    val sqlDF = spark.sql("SELECT * FROM logs limit 10")
+
+
+
+
+
+
+
+    sqlDF.show()
+
+
+
+  }
+
+
+
+}
